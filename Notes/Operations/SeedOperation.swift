@@ -11,6 +11,10 @@ import CoreData
 
 class SeedOperation: Operation {
     
+    enum SeedError: Error {
+        case seedDataNotFound
+    }
+    
     typealias SeedOperationCompletion = ((Bool) -> Void)
     
     private let privateManagedObjectContext: NSManagedObjectContext
@@ -42,16 +46,25 @@ class SeedOperation: Operation {
     }
     
     private func seed() throws {
+        guard let url = Bundle.main.url(forResource: "seed", withExtension: "json") else {
+            throw SeedError.seedDataNotFound
+        }
         
-        let seed = Seed()
+        let data = try Data(contentsOf: url)
+        
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        
+        // Initialize seed data
+        let seed = try decoder.decode(Seed.self, from: data)
         
         var tagsBuffer: [Tag] = []
         var categoriesBuffer: [Category] = []
         
-        for name in seed.tags {
+        for data in seed.tags {
             let tag = Tag(context: privateManagedObjectContext)
             
-            tag.name = name
+            tag.name = data.name
             
             tagsBuffer.append(tag)
         }
@@ -65,13 +78,13 @@ class SeedOperation: Operation {
             categoriesBuffer.append(category)
         }
         
-        for (index, data) in seed.notes.enumerated() {
+        for data in seed.notes {
             let note = Note(context: privateManagedObjectContext)
             
             note.title = data.title
-            note.contents = seed.contents[index]
-            note.createdAt = Date(timeIntervalSince1970: data.createdAt)
-            note.updatedAt = Date(timeIntervalSince1970: data.updatedAt)
+            note.contents = data.contents
+            note.createdAt = data.createdAt
+            note.updatedAt = data.updatedAt
             
             note.category = categoriesBuffer.first {
                 return $0.name == data.category
