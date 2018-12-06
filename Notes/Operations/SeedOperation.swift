@@ -17,7 +17,15 @@ class SeedOperation: Operation {
     
     typealias SeedOperationCompletion = ((Bool) -> Void)
     
+    // MARK: - Properties
+    
     private let privateManagedObjectContext: NSManagedObjectContext
+    
+    private var data: Data?
+    
+    var isFetching: Bool = false
+    
+    // MARK: -
     
     private let completion: SeedOperationCompletion?
     
@@ -34,10 +42,18 @@ class SeedOperation: Operation {
     override func main() {
         
         do {
-            // Seed With Data
-            try seed()
+            try fetchData()
             
-            completion?(true)
+            while isFetching { }
+            
+            if let data = data {
+                // Seed With Data
+                try seed(with: data)
+                
+                completion?(true)
+            } else {
+                completion?(false)
+            }
         } catch {
             print("Unable to Save Managed Object Context After Seeding Persistent Store \(error)")
             
@@ -45,14 +61,30 @@ class SeedOperation: Operation {
         }
     }
     
-    private func seed() throws {
-        guard let url = Bundle.main.url(forResource: "seed", withExtension: "json") else {
+    // MARK: - Helper Methods
+    
+    private func fetchData() throws {
+        isFetching = true
+        // Load Seed Data From Bundle
+        guard let url = URL(string: "https://cocoacasts.s3.amazonaws.com/resources/seeding-a-core-data-persistent-store/seed.json") else {
             throw SeedError.seedDataNotFound
         }
         
-        let data = try Data(contentsOf: url)
+        // Fetch the Data
+        URLSession.shared.dataTask(with: url) { [weak self] (data, _, _) in
+            // Update the Data
+            self?.data = data
+            
+            self?.isFetching = false
+        }.resume()
         
+    }
+    
+    private func seed(with data: Data) throws {
+        // Initialize JSON Decoder
         let decoder = JSONDecoder()
+        
+        // Configure JSON Decoder
         decoder.dateDecodingStrategy = .secondsSince1970
         
         // Initialize seed data
